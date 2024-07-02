@@ -4,7 +4,7 @@ Segmentation Research
 # Training Dataset
 https://www.cavs.msstate.edu/resources/autonomous_dataset.php
 https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9721297&tag=1
-
+* Install CAT/ Directory using 4gb dataset at this layer
 
 # Eval Usage
 python eval_seg_model.py --weight_url ckpts/b0.pt
