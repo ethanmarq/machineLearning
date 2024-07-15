@@ -1,0 +1,1 @@
+/home/marque6/Research 2024/EfficentVit on CaT/bigCav_EfficientVit/runtest/checkpoint/model_best_200.pt
