@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import jaccard_score
 from tqdm import tqdm
 import segmentation_models_pytorch as smp
+import time  # For measuring inference speed
 
 # Custom Dataset
 INPUT_IMAGE_HEIGHT = 1024
@@ -197,19 +198,18 @@ class Trainer:
         print(f"Mean IoU: {miou}")  # Only print the mean IoU
         return avg_loss, miou, miou_per_class
 
-    def train(self, num_epochs):
+    def train(self, num_epochs, save_interval=10, save_path='models'):
+        os.makedirs(save_path, exist_ok=True)
         for epoch in range(1, num_epochs + 1):
             self.train_epoch(epoch)
             val_loss, val_miou, _ = self.validate_epoch()
             self.val_miou_per_epoch.append(val_miou)  # Store MIoU from validation
 
-
-
-# Define class weights based on the dataset
-class_weights = torch.tensor([1.0, 2.0, 2.0, 2.0]).cuda()  # Example weights
-
-# Use weighted loss function
-criterion = nn.CrossEntropyLoss(weight=class_weights)
+            # Save the model every save_interval epochs
+            if epoch % save_interval == 0:
+                model_save_path = os.path.join(save_path, f'model_epoch_{epoch}.pth')
+                torch.save(self.model.state_dict(), model_save_path)
+                print(f'Model saved at epoch {epoch} to {model_save_path}')
 
 # Instantiate the Trainer class with weighted loss
 trainer = Trainer(
@@ -222,23 +222,28 @@ trainer = Trainer(
     device='cuda'
 )
 
-
-
-def print_class_distribution(loader, num_classes):
+def print_class_distribution(model, loader, num_classes):
+    model.eval()  # Set the model to evaluation mode
     class_counts = [0] * num_classes
     
-    for _, masks in loader:
-        for mask in masks:
-            for cls in range(num_classes):
-                class_counts[cls] += (mask == cls).sum().item()
+    with torch.no_grad():  # Disable gradient computation
+        for images, masks in loader:
+            images = images.to('cuda')
+            outputs = model(images)
+            preds = torch.argmax(outputs, dim=1)
+            
+            for pred in preds:
+                for cls in range(num_classes):
+                    class_counts[cls] += (pred == cls).sum().item()
     
     total_pixels = sum(class_counts)
     class_distribution = [count / total_pixels for count in class_counts]
     
     print(f"Class distribution: {class_distribution}")
 
-print_class_distribution(train_loader, NUM_CLASSES)
-print_class_distribution(test_loader, NUM_CLASSES)
+# Call the function with the model and loaders
+print_class_distribution(model, train_loader, NUM_CLASSES)
+print_class_distribution(model, test_loader, NUM_CLASSES)
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -261,6 +266,24 @@ def plot_miou(trainer, num_epochs, save_path='miou.svg'):
     plt.savefig(save_path, format='svg')
     plt.show()
 
+def measure_inference_speed(model, loader, device='cuda'):
+    model.eval()  # Set the model to evaluation mode
+    total_time = 0.0
+    num_batches = 0
+    
+    with torch.no_grad():
+        for images, _ in loader:
+            images = images.to(device)
+            
+            start_time = time.time()
+            _ = model(images)
+            end_time = time.time()
+            
+            total_time += (end_time - start_time)
+            num_batches += 1
+    
+    avg_inference_time = total_time / num_batches
+    print(f'Average inference time per batch: {avg_inference_time:.6f} seconds')
 
 if __name__ == "__main__":
     # Train the model
@@ -268,4 +291,5 @@ if __name__ == "__main__":
     trainer.train(num_epochs)
     plot_miou(trainer, num_epochs)
 
-
+    # Measure inference speed
+    measure_inference_speed(model, test_loader)
